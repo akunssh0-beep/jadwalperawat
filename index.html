@@ -219,6 +219,14 @@
         }
         .animate-slideIn { animation: slideIn 0.3s ease-out forwards; }
     </style>
+
+    <!-- PWA Optimized by it.adi.p Automator -->
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json?v=1777247226404">
+    <link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body class="p-2 md:p-8">
 
@@ -752,5 +760,30 @@
     window.onload = () => { initFilters(); fetchData(); };
 </script>
 
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js?v=1777247226404').then(reg => {
+            console.log('PWA: ServiceWorker Registered');
+            
+            reg.onupdatefound = () => {
+              const installingWorker = reg.installing;
+              installingWorker.onstatechange = () => {
+                if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  window.location.reload();
+                }
+              };
+            };
+          });
+        });
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshing) return;
+          refreshing = true;
+          window.location.reload();
+        });
+      }
+    </script>
 </body>
 </html>
