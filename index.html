@@ -112,21 +112,23 @@
             background: #f8fafc !important;
         }
         
-        select.shift-input {
+        select.shift-input, .shift-display {
             width: 100%;
             height: 44px;
             border: none;
             background: transparent;
             text-align: center;
             font-weight: 800;
-            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             appearance: none;
             outline: none;
             transition: all 0.2s;
             font-size: 10px;
         }
         @media (min-width: 768px) {
-            select.shift-input { height: 52px; font-size: 11px; }
+            select.shift-input, .shift-display { height: 52px; font-size: 11px; }
         }
 
         /* Default Shift Colors */
@@ -220,7 +222,6 @@
         .animate-slideIn { animation: slideIn 0.3s ease-out forwards; }
     </style>
 
-    <!-- PWA Optimized by it.adi.p Automator -->
     <meta name="theme-color" content="#3b82f6">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -284,7 +285,7 @@
             </div>
         </div>
 
-        <div class="action-grid w-full lg:w-auto">
+        <div id="admin-actions" class="action-grid w-full lg:w-auto">
             <button onclick="openAddNurseModal()" class="py-3 px-2 md:px-5 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-2">
                 <span>👥</span> Petugas
             </button>
@@ -301,7 +302,12 @@
     </div>
 
     <div class="bg-white p-4 md:p-6 rounded-2xl md:rounded-[28px] border border-slate-200 flex flex-col gap-4 mb-4">
-        <div class="flex flex-col md:flex-row gap-3 items-center w-full">
+        <div class="flex flex-col md:flex-row gap-4 items-center w-full">
+            <div class="flex bg-slate-900 p-1 rounded-xl border border-slate-800 w-full md:w-48">
+                <button id="mode-view" onclick="setAppMode('view')" class="btn-toggle active flex-1 text-center">👁️ View</button>
+                <button id="mode-edit" onclick="setAppMode('edit')" class="btn-toggle inactive flex-1 text-center">✏️ Edit</button>
+            </div>
+
             <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full md:w-48">
                 <button id="view-monthly" onclick="setViewMode('monthly')" class="btn-toggle active flex-1 text-center">Bulan</button>
                 <button id="view-weekly" onclick="setViewMode('weekly')" class="btn-toggle inactive flex-1 text-center">Minggu</button>
@@ -364,12 +370,13 @@
     
     let db = { 
         officers: [], 
-        schedule: {}, // Format baru: schedule[name][year][month][day]
+        schedule: {}, 
         config: { 
             shifts: ["P", "S", "M", "POLI"] 
         } 
     };
     let viewMode = 'monthly';
+    let appMode = 'view'; // Default Mode View
     const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
     const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
     const now = new Date();
@@ -381,6 +388,23 @@
         t.innerHTML = `<span>✅</span> <span class="font-bold text-[9px] uppercase tracking-wider">${msg}</span>`;
         container.appendChild(t);
         setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3000);
+    }
+
+    // New: Function to handle Application Mode (View vs Edit)
+    function setAppMode(mode) {
+        appMode = mode;
+        document.getElementById('mode-view').className = mode === 'view' ? 'btn-toggle active flex-1 text-center' : 'btn-toggle inactive flex-1 text-center';
+        document.getElementById('mode-edit').className = mode === 'edit' ? 'btn-toggle active flex-1 text-center' : 'btn-toggle inactive flex-1 text-center';
+        
+        // Hide admin buttons in view mode
+        const adminActions = document.getElementById('admin-actions');
+        if (mode === 'view') {
+            adminActions.classList.add('hidden');
+        } else {
+            adminActions.classList.remove('hidden');
+        }
+        
+        renderTable();
     }
 
     function openShiftModal() {
@@ -503,6 +527,9 @@
             yearSel.add(opt);
         }
         updateWeekOptions();
+        
+        // Initialize Default Mode
+        setAppMode('view');
     }
 
     function handleMonthYearChange() { updateWeekOptions(); renderTable(); }
@@ -604,12 +631,10 @@
             filtered.forEach(name => {
                 bodyHtml += `<tr><td class="sticky-col uppercase truncate">${name}</td>`;
                 daysToRender.forEach(d => {
-                    // AMBIL DATA BERDASARKAN TAHUN-BULAN-TANGGAL AKTUAL (MEMPERBAIKI BUG MINGGUAN)
                     let shiftValue = "";
                     if (db.schedule[name] && db.schedule[name][d.year] && db.schedule[name][d.year][d.month]) {
                         shiftValue = db.schedule[name][d.year][d.month][d.day] || "";
                     } else if (db.schedule[name] && db.schedule[name][d.day] && d.month === monthSelect) {
-                        // Support data lama jika formatnya masih array tanggal saja
                         shiftValue = db.schedule[name][d.day] || "";
                     }
 
@@ -617,17 +642,22 @@
                     const shiftClass = getShiftClass(shiftValue);
                     const classes = `${d.isSunday ? 'cell-sunday' : ''} ${isToday ? 'cell-today' : ''} ${shiftClass}`;
                     
-                    let optionsHtml = '<option value=""></option>';
-                    db.config.shifts.forEach(sh => {
-                        optionsHtml += `<option value="${sh}" ${shiftValue === sh ? 'selected' : ''}>${sh}</option>`;
-                    });
+                    if (appMode === 'edit') {
+                        let optionsHtml = '<option value=""></option>';
+                        db.config.shifts.forEach(sh => {
+                            optionsHtml += `<option value="${sh}" ${shiftValue === sh ? 'selected' : ''}>${sh}</option>`;
+                        });
 
-                    bodyHtml += `
-                    <td class="${classes}">
-                        <select onchange="updateShift('${name}', ${d.year}, ${d.month}, ${d.day}, this, ${d.isSunday}, ${isToday})" class="shift-input ${classes}">
-                            ${optionsHtml}
-                        </select>
-                    </td>`;
+                        bodyHtml += `
+                        <td class="${classes}">
+                            <select onchange="updateShift('${name}', ${d.year}, ${d.month}, ${d.day}, this, ${d.isSunday}, ${isToday})" class="shift-input ${classes}">
+                                ${optionsHtml}
+                            </select>
+                        </td>`;
+                    } else {
+                        // Render as text in View Mode
+                        bodyHtml += `<td class="${classes}"><div class="shift-display">${shiftValue}</div></td>`;
+                    }
                 });
                 bodyHtml += `</tr>`;
             });
@@ -668,8 +698,6 @@
         if (!db.schedule[name][year][month]) db.schedule[name][year][month] = {};
         
         db.schedule[name][year][month][day] = el.value;
-        
-        // Simpan juga ke format lama (hanya tanggal) agar kompatibel dengan fitur lama jika diperlukan
         db.schedule[name][day] = el.value;
 
         const td = el.parentElement;
@@ -694,7 +722,10 @@
         const month = monthNames[document.getElementById('select-month').value];
         const year = document.getElementById('select-year').value;
         const table = document.getElementById("main-table").cloneNode(true);
+        
+        // Handle dropdowns vs view mode text
         table.querySelectorAll('select').forEach(sel => { const txt = document.createTextNode(sel.value); sel.parentNode.replaceChild(txt, sel); });
+        
         const wb = XLSX.utils.table_to_book(table, { sheet: "Jadwal" });
         const dataArr = XLSX.utils.sheet_to_json(wb.Sheets["Jadwal"], { header: 1 });
         dataArr.push([], [`Dihasilkan: ${new Date().toLocaleString()}`], [`© 2026 Puskesmas Sampanahan`]);
@@ -766,7 +797,6 @@
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('./sw.js?v=1777247226404').then(reg => {
             console.log('PWA: ServiceWorker Registered');
-            
             reg.onupdatefound = () => {
               const installingWorker = reg.installing;
               installingWorker.onstatechange = () => {
