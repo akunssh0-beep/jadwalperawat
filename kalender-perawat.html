@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Editor Jadwal - Puskesmas Sampanahan</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        :root {
+            --primary: #0f172a;
+            --accent: #0d9488;
+            --sunday: #ef4444;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #f1f5f9;
+            color: #1e293b;
+            overscroll-behavior-y: contain;
+        }
+        
+        .excel-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            padding: 12px;
+        }
+        @media (min-width: 768px) {
+            .excel-container { padding: 20px; }
+        }
+
+        .table-wrapper {
+            overflow: auto;
+            max-height: 70vh;
+            border: 1px solid #f1f5f9;
+            border-radius: 12px;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+        }
+
+        th {
+            background: #f8fafc;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            font-size: 8px;
+            font-weight: 800;
+            text-transform: uppercase;
+            color: #64748b;
+            padding: 8px 4px;
+            border-bottom: 2px solid #e2e8f0;
+            border-right: 1px solid #e2e8f0;
+            white-space: nowrap;
+        }
+        @media (min-width: 768px) {
+            th { font-size: 10px; padding: 12px 8px; }
+        }
+
+        td {
+            padding: 0;
+            border-bottom: 1px solid #f1f5f9;
+            border-right: 1px solid #f1f5f9;
+            font-size: 10px;
+            text-align: center;
+            min-width: 45px;
+        }
+        @media (min-width: 768px) {
+            td { font-size: 11px; min-width: 60px; }
+        }
+        
+        .sticky-col {
+            position: sticky;
+            left: 0;
+            background: white !important;
+            z-index: 25;
+            text-align: left;
+            padding-left: 12px !important;
+            padding-right: 4px !important;
+            font-weight: 700;
+            min-width: 110px;
+            max-width: 140px;
+            border-right: 2px solid #e2e8f0 !important;
+            height: 44px;
+            font-size: 9px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.02);
+        }
+        @media (min-width: 768px) {
+            .sticky-col { 
+                min-width: 170px; 
+                padding-left: 16px !important;
+                height: 52px;
+                font-size: 11px;
+            }
+        }
+
+        th.sticky-col {
+            z-index: 40 !important;
+            background: #f8fafc !important;
+        }
+        
+        select.shift-input {
+            width: 100%;
+            height: 44px;
+            border: none;
+            background: transparent;
+            text-align: center;
+            font-weight: 800;
+            cursor: pointer;
+            appearance: none;
+            outline: none;
+            transition: all 0.2s;
+            font-size: 10px;
+        }
+        @media (min-width: 768px) {
+            select.shift-input { height: 52px; font-size: 11px; }
+        }
+
+        /* Default Shift Colors */
+        .cell-P { background-color: #f0fdfa !important; color: #0d9488 !important; }
+        .cell-S { background-color: #fffbeb !important; color: #d97706 !important; }
+        .cell-M { background-color: #eff6ff !important; color: #2563eb !important; }
+        .cell-POLI { background-color: #f5f3ff !important; color: #7c3aed !important; }
+        
+        /* New Shifts generic style */
+        .cell-custom { background-color: #f8fafc !important; color: #64748b !important; }
+
+        .cell-sunday { color: var(--sunday) !important; }
+        th.cell-sunday { background-color: #fef2f2; }
+        td.cell-sunday:not([class*="cell-"]) { background-color: #fffafb; }
+
+        .cell-today { outline: 2px solid var(--accent); outline-offset: -2px; position: relative; }
+        th.cell-today::after { 
+            content: 'HARI INI'; position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+            background: var(--accent); color: white; font-size: 5px; padding: 1px 3px; border-radius: 3px;
+        }
+
+        #toast-container { position: fixed; top: 10px; right: 10px; z-index: 9999; left: 10px; pointer-events: none; }
+        @media (min-width: 768px) { #toast-container { left: auto; top: 20px; right: 20px; } }
+        
+        .toast { 
+            background: white; border-radius: 12px; padding: 12px 16px; 
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); border-left: 4px solid #10b981; 
+            display: flex; align-items: center; gap: 10px; transform: translateY(-100px); transition: 0.4s;
+            pointer-events: auto; margin-bottom: 8px;
+        }
+        .toast.show { transform: translateY(0); }
+
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(8px); z-index: 1000;
+            display: none; align-items: center; justify-content: center;
+            padding: 16px;
+        }
+        .modal-card {
+            background: white; width: 100%; max-width: 450px;
+            border-radius: 24px; padding: 20px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            max-height: 90vh; display: flex; flex-direction: column;
+        }
+
+        .scroll-list {
+            overflow-y: auto;
+            max-height: 35vh;
+            margin: 12px 0;
+            padding-right: 4px;
+        }
+        .list-item {
+            display: flex; align-items: center; justify-content: space-between;
+            background: #f8fafc; padding: 10px 14px; border-radius: 12px;
+            margin-bottom: 6px; border: 1px solid #f1f5f9;
+        }
+
+        .action-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+        @media (min-width: 1024px) {
+            .action-grid { display: flex; }
+        }
+
+        .btn-toggle {
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 9px;
+            font-weight: 800;
+            text-transform: uppercase;
+            transition: all 0.2s ease;
+        }
+        .btn-toggle.active { background: var(--primary); color: white; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .btn-toggle.inactive { background: transparent; color: #64748b; }
+
+        .export-footer {
+            display: none;
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #e2e8f0;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slideIn { animation: slideIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="p-2 md:p-8">
+
+<div id="toast-container"></div>
+
+<div id="modal-add-nurse" class="modal-overlay" onclick="if(event.target === this) closeAddNurseModal()">
+    <div class="modal-card">
+        <div class="flex justify-between items-center mb-3">
+            <div>
+                <h3 class="font-black text-slate-900 text-base uppercase">Manajemen Petugas</h3>
+                <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Daftar Tenaga Medis</p>
+            </div>
+            <button onclick="closeAddNurseModal()" class="w-8 h-8 flex items-center justify-center bg-slate-50 rounded-full text-slate-300">✕</button>
+        </div>
+        <div id="nurse-manager-list" class="scroll-list"></div>
+        <div class="border-t border-slate-100 pt-4 mt-2">
+            <label class="text-[9px] font-black uppercase text-slate-400 block mb-2">Tambah Petugas Baru</label>
+            <div class="flex flex-col gap-2">
+                <input type="text" id="new-nurse-input" class="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl outline-none focus:border-teal-500 transition-all font-bold text-xs uppercase" placeholder="Nama Petugas...">
+                <button onclick="submitNewNurse()" class="w-full py-3 rounded-xl font-black text-[10px] uppercase bg-teal-600 text-white shadow-lg shadow-teal-100">Tambah</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="modal-shift-settings" class="modal-overlay" onclick="if(event.target === this) closeShiftModal()">
+    <div class="modal-card">
+        <div class="flex justify-between items-center mb-3">
+            <div>
+                <h3 class="font-black text-slate-900 text-base uppercase">Daftar Nama Shift</h3>
+                <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Kategori Pilihan Jadwal</p>
+            </div>
+            <button onclick="closeShiftModal()" class="w-8 h-8 flex items-center justify-center bg-slate-50 rounded-full text-slate-300">✕</button>
+        </div>
+        <div id="shift-manager-list" class="scroll-list"></div>
+        <div class="border-t border-slate-100 pt-4 mt-2">
+            <label class="text-[9px] font-black uppercase text-slate-400 block mb-2">Tambah Jenis Shift Baru</label>
+            <div class="flex flex-col gap-2">
+                <input type="text" id="new-shift-input" maxlength="10" class="w-full bg-slate-50 border-2 border-slate-100 p-3 rounded-xl outline-none focus:border-teal-500 transition-all font-bold text-xs uppercase" placeholder="Contoh: LIBUR, CUTI, atau L">
+                <button onclick="submitNewShift()" class="w-full py-3 rounded-xl font-black text-[10px] uppercase bg-slate-900 text-white shadow-lg">Tambah Shift</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="max-w-full mx-auto">
+    <div class="flex flex-col lg:flex-row justify-between items-center mb-6 gap-4">
+        <div class="flex items-center gap-3 w-full lg:w-auto">
+            <div class="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white text-xl shadow-lg">
+                📝
+            </div>
+            <div class="flex-1">
+                <h1 class="text-xl font-black tracking-tighter uppercase leading-none">Editor <span class="text-teal-600">Jadwal</span></h1>
+                <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Puskesmas Sampanahan</p>
+            </div>
+        </div>
+
+        <div class="action-grid w-full lg:w-auto">
+            <button onclick="openAddNurseModal()" class="py-3 px-2 md:px-5 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-2">
+                <span>👥</span> Petugas
+            </button>
+            <button onclick="openShiftModal()" class="py-3 px-2 md:px-5 bg-slate-800 text-white rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-2 shadow-sm">
+                <span>⚡</span> Shift
+            </button>
+            <button onclick="exportToImage(event)" class="py-3 px-2 md:px-5 bg-amber-500 text-white rounded-xl text-[9px] font-black uppercase shadow-lg shadow-amber-100 flex items-center justify-center gap-2">
+                📸 Foto
+            </button>
+            <button onclick="saveToCloud()" id="btn-save" class="py-3 px-2 md:px-5 bg-teal-600 text-white rounded-xl text-[9px] font-black uppercase shadow-xl shadow-teal-100 flex items-center justify-center gap-2">
+                <span>💾</span> Simpan
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-white p-4 md:p-6 rounded-2xl md:rounded-[28px] border border-slate-200 flex flex-col gap-4 mb-4">
+        <div class="flex flex-col md:flex-row gap-3 items-center w-full">
+            <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full md:w-48">
+                <button id="view-monthly" onclick="setViewMode('monthly')" class="btn-toggle active flex-1 text-center">Bulan</button>
+                <button id="view-weekly" onclick="setViewMode('weekly')" class="btn-toggle inactive flex-1 text-center">Minggu</button>
+            </div>
+
+            <div class="flex gap-2 w-full md:flex-1">
+                <select id="select-month" onchange="handleMonthYearChange()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-[10px] font-bold outline-none flex-1"></select>
+                <select id="select-year" onchange="handleMonthYearChange()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-[10px] font-bold outline-none flex-1"></select>
+            </div>
+        </div>
+
+        <div id="week-selector-container" class="hidden w-full bg-teal-50/50 p-3 rounded-xl border border-teal-100 animate-slideIn">
+            <label class="text-[9px] font-black uppercase text-teal-600 block mb-1.5 ml-1">Pilih Minggu Kerja:</label>
+            <select id="select-week" onchange="renderTable()" class="bg-white border border-teal-100 rounded-xl px-3 py-2.5 text-[10px] font-bold outline-none w-full text-teal-800 shadow-sm"></select>
+        </div>
+
+        <div class="flex flex-col md:flex-row gap-3">
+            <div class="flex-1">
+                <input type="text" id="search-nurse" oninput="renderTable()" placeholder="Cari nama petugas..." class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-[10px] font-bold outline-none focus:border-teal-500">
+            </div>
+            <div id="toolbar-legend" class="flex flex-wrap gap-2 text-[8px] font-black uppercase justify-center items-center">
+            </div>
+        </div>
+    </div>
+
+    <div id="capture-area" class="excel-container">
+        <div id="export-header" class="hidden mb-4 text-center">
+            <h2 class="text-base font-black uppercase tracking-tighter">Jadwal Tenaga Medis</h2>
+            <p id="export-period-label" class="text-[9px] font-bold text-slate-500 uppercase mt-1"></p>
+        </div>
+
+        <div class="table-wrapper">
+            <table id="main-table">
+                <thead id="table-head"></thead>
+                <tbody id="table-body">
+                    <tr>
+                        <td colspan="40" class="py-20 text-slate-300 font-bold uppercase text-[9px]">Memuat Data...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div id="export-legend" class="hidden mt-4 flex justify-center flex-wrap gap-4 pb-4 border-b border-slate-100">
+            </div>
+
+        <div id="capture-footer" class="export-footer">
+            <div class="text-[8px] font-black text-slate-400 uppercase">SMP Puskesmas Sampanahan</div>
+            <div class="text-[8px] font-black text-slate-900 uppercase italic">© 2024. All Rights Reserved.</div>
+        </div>
+    </div>
+    
+    <div class="mt-4 flex flex-col md:flex-row justify-between items-center gap-2">
+        <p class="text-[8px] font-bold text-slate-400 uppercase italic text-center">* Geser tabel ke samping untuk melihat seluruh tanggal.</p>
+        <button onclick="exportToExcel()" class="text-[9px] font-black uppercase text-teal-600 hover:underline">📥 Unduh Excel (.xlsx)</button>
+    </div>
+</div>
+
+<script>
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw-Fl_qSNgqr9oEnn3vUmCtN4bRCZ5M7wz5YMiofUD33pN-kICuL6zubelKVcI_k2luXg/exec";
+    
+    let db = { 
+        officers: [], 
+        schedule: {}, // Format baru: schedule[name][year][month][day]
+        config: { 
+            shifts: ["P", "S", "M", "POLI"] 
+        } 
+    };
+    let viewMode = 'monthly';
+    const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+    const now = new Date();
+
+    function showToast(msg) {
+        const container = document.getElementById('toast-container');
+        const t = document.createElement('div');
+        t.className = `toast show`;
+        t.innerHTML = `<span>✅</span> <span class="font-bold text-[9px] uppercase tracking-wider">${msg}</span>`;
+        container.appendChild(t);
+        setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3000);
+    }
+
+    function openShiftModal() {
+        renderShiftManagerList();
+        document.getElementById('modal-shift-settings').style.display = 'flex';
+        document.getElementById('new-shift-input').focus();
+    }
+
+    function closeShiftModal() {
+        document.getElementById('modal-shift-settings').style.display = 'none';
+    }
+
+    function renderShiftManagerList() {
+        const list = document.getElementById('shift-manager-list');
+        list.innerHTML = db.config.shifts.map((code, index) => `
+            <div class="list-item">
+                <span class="text-[10px] font-black uppercase text-slate-700">${code}</span>
+                <button onclick="deleteShift(${index})" class="w-7 h-7 bg-rose-50 text-rose-500 rounded-lg flex items-center justify-center text-[10px]">🗑️</button>
+            </div>
+        `).join('');
+    }
+
+    function submitNewShift() {
+        const input = document.getElementById('new-shift-input');
+        const code = input.value.trim().toUpperCase();
+        if (!code) return showToast("Shift kosong!");
+        if (db.config.shifts.includes(code)) return showToast("Shift sudah ada!");
+        db.config.shifts.push(code);
+        input.value = "";
+        renderShiftManagerList();
+        renderTable();
+        showToast(`Shift ${code} ditambahkan`);
+    }
+
+    function deleteShift(index) {
+        const code = db.config.shifts[index];
+        if (["P", "S", "M"].includes(code)) return alert("Shift dasar tidak bisa dihapus.");
+        if (confirm(`Hapus kategori shift "${code}"?`)) {
+            db.config.shifts.splice(index, 1);
+            renderShiftManagerList();
+            renderTable();
+        }
+    }
+
+    function openAddNurseModal() {
+        renderNurseManagerList();
+        document.getElementById('modal-add-nurse').style.display = 'flex';
+        document.getElementById('new-nurse-input').focus();
+    }
+
+    function closeAddNurseModal() {
+        document.getElementById('modal-add-nurse').style.display = 'none';
+    }
+
+    function renderNurseManagerList() {
+        const list = document.getElementById('nurse-manager-list');
+        if (db.officers.length === 0) {
+            list.innerHTML = `<p class="text-[9px] text-center text-slate-300 py-6 font-bold italic uppercase">Belum ada petugas</p>`;
+            return;
+        }
+        list.innerHTML = db.officers.map((name, index) => `
+            <div class="list-item">
+                <span class="text-[10px] font-black uppercase text-slate-700 truncate mr-2">${name}</span>
+                <div class="flex gap-1.5 flex-shrink-0">
+                    <button onclick="editNurseName(${index})" class="w-7 h-7 bg-indigo-50 text-indigo-500 rounded-lg flex items-center justify-center text-[10px]">✏️</button>
+                    <button onclick="deleteNurse(${index})" class="w-7 h-7 bg-rose-50 text-rose-500 rounded-lg flex items-center justify-center text-[10px]">🗑️</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function submitNewNurse() {
+        const input = document.getElementById('new-nurse-input');
+        const name = input.value.trim().toUpperCase();
+        if (!name) return showToast("Nama kosong!");
+        if (db.officers.includes(name)) return showToast("Sudah ada!");
+        db.officers.push(name);
+        input.value = "";
+        renderNurseManagerList();
+        renderTable();
+        showToast(`Petugas ${name} ditambahkan`);
+    }
+
+    function deleteNurse(index) {
+        const name = db.officers[index];
+        if (confirm(`Hapus ${name}?`)) {
+            db.officers.splice(index, 1);
+            if (db.schedule[name]) delete db.schedule[name];
+            renderNurseManagerList();
+            renderTable();
+            showToast("Berhasil dihapus");
+        }
+    }
+
+    function editNurseName(index) {
+        const oldName = db.officers[index];
+        const newName = prompt("Ubah Nama:", oldName);
+        if (newName && newName.trim() !== "" && newName.trim().toUpperCase() !== oldName) {
+            const formatted = newName.trim().toUpperCase();
+            if (db.officers.includes(formatted)) return alert("Nama sudah ada!");
+            db.officers[index] = formatted;
+            if (db.schedule[oldName]) { db.schedule[formatted] = db.schedule[oldName]; delete db.schedule[oldName]; }
+            renderNurseManagerList();
+            renderTable();
+            showToast("Nama diubah");
+        }
+    }
+
+    function initFilters() {
+        const monthSel = document.getElementById('select-month');
+        monthNames.forEach((m, i) => {
+            const opt = new Option(m, i);
+            if(i === now.getMonth()) opt.selected = true;
+            monthSel.add(opt);
+        });
+        const yearSel = document.getElementById('select-year');
+        for(let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
+            const opt = new Option(y, y);
+            if(y === now.getFullYear()) opt.selected = true;
+            yearSel.add(opt);
+        }
+        updateWeekOptions();
+    }
+
+    function handleMonthYearChange() { updateWeekOptions(); renderTable(); }
+
+    function updateWeekOptions() {
+        const month = parseInt(document.getElementById('select-month').value);
+        const year = parseInt(document.getElementById('select-year').value);
+        const weekSel = document.getElementById('select-week');
+        weekSel.innerHTML = "";
+        let current = new Date(year, month, 1);
+        while(current.getDay() !== 1) current.setDate(current.getDate() - 1);
+        const today = new Date(); today.setHours(0,0,0,0);
+        for(let i = 0; i < 6; i++) {
+            let weekStart = new Date(current);
+            let weekEnd = new Date(current); weekEnd.setDate(weekEnd.getDate() + 6);
+            if (weekStart.getMonth() === month || weekEnd.getMonth() === month) {
+                let label = `Minggu ${i+1} (${weekStart.getDate()} ${monthNames[weekStart.getMonth()].substr(0,3)} - ${weekEnd.getDate()} ${monthNames[weekEnd.getMonth()].substr(0,3)})`;
+                let val = `${weekStart.getFullYear()}-${weekStart.getMonth()}-${weekStart.getDate()}`;
+                const opt = new Option(label, val);
+                if (today >= weekStart && today <= weekEnd) opt.selected = true;
+                weekSel.add(opt);
+            }
+            current.setDate(current.getDate() + 7);
+        }
+    }
+
+    function setViewMode(mode) {
+        viewMode = mode;
+        document.getElementById('view-monthly').className = mode === 'monthly' ? 'btn-toggle active flex-1 text-center' : 'btn-toggle inactive flex-1 text-center';
+        document.getElementById('view-weekly').className = mode === 'weekly' ? 'btn-toggle active flex-1 text-center' : 'btn-toggle inactive flex-1 text-center';
+        const weekContainer = document.getElementById('week-selector-container');
+        if (mode === 'weekly') weekContainer.classList.remove('hidden');
+        else weekContainer.classList.add('hidden');
+        renderTable(true); 
+    }
+
+    async function fetchData() {
+        try {
+            const response = await fetch(WEB_APP_URL + "?action=getData");
+            const data = await response.json();
+            db.officers = data.officers || [];
+            db.schedule = data.schedule || {};
+            if (data.config && data.config.shifts) db.config.shifts = data.config.shifts;
+            renderTable(true); 
+        } catch (error) {
+            db.officers = ["CONTOH PETUGAS"];
+            renderTable(true);
+        }
+    }
+
+    function getShiftClass(val) {
+        if (["P", "S", "M", "POLI"].includes(val)) return 'cell-' + val;
+        return val ? 'cell-custom' : '';
+    }
+
+    function renderTable(shouldScroll = false) {
+        const monthSelect = parseInt(document.getElementById('select-month').value);
+        const yearSelect = parseInt(document.getElementById('select-year').value);
+        const search = document.getElementById('search-nurse').value.toLowerCase();
+        let daysToRender = [];
+        if (viewMode === 'weekly') {
+            const weekVal = document.getElementById('select-week').value;
+            if(weekVal) {
+                const parts = weekVal.split('-');
+                let startDate = new Date(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]));
+                for(let i = 0; i < 7; i++) {
+                    let d = new Date(startDate); d.setDate(d.getDate() + i);
+                    daysToRender.push({ day: d.getDate(), month: d.getMonth(), year: d.getFullYear(), isSunday: d.getDay() === 0, dayName: dayNames[d.getDay()] });
+                }
+            }
+        } else {
+            const daysInMonth = new Date(yearSelect, monthSelect + 1, 0).getDate();
+            for(let d = 1; d <= daysInMonth; d++) {
+                let dateObj = new Date(yearSelect, monthSelect, d);
+                daysToRender.push({ day: d, month: monthSelect, year: yearSelect, isSunday: dateObj.getDay() === 0, dayName: dayNames[dateObj.getDay()] });
+            }
+        }
+
+        document.getElementById('export-period-label').innerText = `Puskesmas Sampanahan • ${monthNames[monthSelect]} ${yearSelect}`;
+        updateLegends();
+
+        const today = new Date();
+        const tDay = today.getDate(), tMonth = today.getMonth(), tYear = today.getFullYear();
+
+        let headHtml = `<tr><th class="sticky-col">Petugas</th>`;
+        daysToRender.forEach(d => {
+            const isToday = d.day === tDay && d.month === tMonth && d.year === tYear;
+            const classes = `${d.isSunday ? 'cell-sunday' : ''} ${isToday ? 'cell-today' : ''}`;
+            headHtml += `<th ${isToday ? 'id="col-today"' : ''} class="${classes}"><div class="mb-0.5">${d.dayName}</div><div class="text-[10px]">${d.day}</div></th>`;
+        });
+        headHtml += `</tr>`;
+        document.getElementById('table-head').innerHTML = headHtml;
+
+        let bodyHtml = "";
+        const filtered = db.officers.filter(name => name.toLowerCase().includes(search));
+        if (filtered.length === 0) {
+            bodyHtml = `<tr><td colspan="${daysToRender.length + 1}" class="py-12 text-slate-400 font-bold text-[9px] uppercase text-center">Data Kosong</td></tr>`;
+        } else {
+            filtered.forEach(name => {
+                bodyHtml += `<tr><td class="sticky-col uppercase truncate">${name}</td>`;
+                daysToRender.forEach(d => {
+                    // AMBIL DATA BERDASARKAN TAHUN-BULAN-TANGGAL AKTUAL (MEMPERBAIKI BUG MINGGUAN)
+                    let shiftValue = "";
+                    if (db.schedule[name] && db.schedule[name][d.year] && db.schedule[name][d.year][d.month]) {
+                        shiftValue = db.schedule[name][d.year][d.month][d.day] || "";
+                    } else if (db.schedule[name] && db.schedule[name][d.day] && d.month === monthSelect) {
+                        // Support data lama jika formatnya masih array tanggal saja
+                        shiftValue = db.schedule[name][d.day] || "";
+                    }
+
+                    const isToday = d.day === tDay && d.month === tMonth && d.year === tYear;
+                    const shiftClass = getShiftClass(shiftValue);
+                    const classes = `${d.isSunday ? 'cell-sunday' : ''} ${isToday ? 'cell-today' : ''} ${shiftClass}`;
+                    
+                    let optionsHtml = '<option value=""></option>';
+                    db.config.shifts.forEach(sh => {
+                        optionsHtml += `<option value="${sh}" ${shiftValue === sh ? 'selected' : ''}>${sh}</option>`;
+                    });
+
+                    bodyHtml += `
+                    <td class="${classes}">
+                        <select onchange="updateShift('${name}', ${d.year}, ${d.month}, ${d.day}, this, ${d.isSunday}, ${isToday})" class="shift-input ${classes}">
+                            ${optionsHtml}
+                        </select>
+                    </td>`;
+                });
+                bodyHtml += `</tr>`;
+            });
+        }
+        document.getElementById('table-body').innerHTML = bodyHtml;
+        if (shouldScroll) setTimeout(scrollToToday, 300);
+    }
+
+    function updateLegends() {
+        const toolbar = document.getElementById('toolbar-legend');
+        const exportL = document.getElementById('export-legend');
+        
+        let html = "";
+        db.config.shifts.forEach(sh => {
+            const shiftClass = getShiftClass(sh);
+            html += `<div class="flex items-center gap-1"><div class="w-2.5 h-2.5 rounded-sm ${shiftClass}"></div> ${sh}</div>`;
+        });
+        toolbar.innerHTML = html;
+
+        let exportHtml = "";
+        db.config.shifts.forEach(sh => {
+            const shiftClass = getShiftClass(sh);
+            exportHtml += `<div class="export-legend-item"><div class="legend-box ${shiftClass}" style="width:14px; height:14px; border-radius:4px;"></div><span class="text-[8px] font-black uppercase ml-1">${sh}</span></div>`;
+        });
+        exportHtml += `<div class="export-legend-item"><div class="legend-box" style="width:14px; height:14px; border-radius:4px; background:#fef2f2"></div><span class="text-[8px] font-black uppercase ml-1 text-red-500">Minggu</span></div>`;
+        exportL.innerHTML = exportHtml;
+    }
+
+    function scrollToToday() {
+        const col = document.getElementById('col-today');
+        const wrapper = document.querySelector('.table-wrapper');
+        if (col && wrapper) wrapper.scrollLeft = col.offsetLeft - (wrapper.clientWidth / 2);
+    }
+
+    function updateShift(name, year, month, day, el, isSunday, isToday) {
+        if (!db.schedule[name]) db.schedule[name] = {};
+        if (!db.schedule[name][year]) db.schedule[name][year] = {};
+        if (!db.schedule[name][year][month]) db.schedule[name][year][month] = {};
+        
+        db.schedule[name][year][month][day] = el.value;
+        
+        // Simpan juga ke format lama (hanya tanggal) agar kompatibel dengan fitur lama jika diperlukan
+        db.schedule[name][day] = el.value;
+
+        const td = el.parentElement;
+        const shiftClass = getShiftClass(el.value);
+        const classes = `${isSunday ? 'cell-sunday' : ''} ${isToday ? 'cell-today' : ''} ${shiftClass}`;
+        td.className = classes; el.className = `shift-input ${classes}`;
+    }
+
+    async function saveToCloud() {
+        const btn = document.getElementById('btn-save'); btn.disabled = true; btn.innerHTML = `⏳...`;
+        try {
+            const resp = await fetch(WEB_APP_URL, {
+                method: "POST",
+                body: JSON.stringify({ action: 'updateFullConfig', payload: { config: db.config, officers: db.officers, schedule: db.schedule } })
+            });
+            const res = await resp.json();
+            if(res.status === 'success') showToast("Tersimpan!");
+        } catch(e) { alert("Gagal Simpan!"); } finally { btn.disabled = false; btn.innerHTML = `💾 Simpan`; }
+    }
+
+    function exportToExcel() {
+        const month = monthNames[document.getElementById('select-month').value];
+        const year = document.getElementById('select-year').value;
+        const table = document.getElementById("main-table").cloneNode(true);
+        table.querySelectorAll('select').forEach(sel => { const txt = document.createTextNode(sel.value); sel.parentNode.replaceChild(txt, sel); });
+        const wb = XLSX.utils.table_to_book(table, { sheet: "Jadwal" });
+        const dataArr = XLSX.utils.sheet_to_json(wb.Sheets["Jadwal"], { header: 1 });
+        dataArr.push([], [`Dihasilkan: ${new Date().toLocaleString()}`], [`© 2026 Puskesmas Sampanahan`]);
+        wb.Sheets["Jadwal"] = XLSX.utils.aoa_to_sheet(dataArr);
+        XLSX.writeFile(wb, `Jadwal_${month}_${year}.xlsx`);
+    }
+
+    async function exportToImage(e) {
+        const area = document.getElementById('capture-area');
+        const btn = e.currentTarget; const originalText = btn.innerHTML;
+        btn.innerHTML = "⏳..."; btn.disabled = true;
+        
+        const originalScrollX = window.scrollX; const originalScrollY = window.scrollY;
+        window.scrollTo(0, 0);
+        
+        const stickyCols = document.querySelectorAll('.sticky-col');
+        const headers = document.querySelectorAll('th');
+        const tableWrapper = document.querySelector('.table-wrapper');
+        const table = document.getElementById('main-table');
+        const origWrapperStyle = tableWrapper.getAttribute('style') || '';
+        const origAreaStyle = area.getAttribute('style') || '';
+        
+        document.getElementById('export-header').classList.remove('hidden');
+        document.getElementById('export-legend').classList.remove('hidden');
+        document.getElementById('capture-footer').style.display = 'flex';
+        
+        tableWrapper.style.maxHeight = 'none'; tableWrapper.style.overflow = 'visible';
+        area.style.width = table.scrollWidth + 40 + 'px'; area.style.maxWidth = 'none';
+        
+        stickyCols.forEach(el => el.style.position = 'static');
+        headers.forEach(el => el.style.position = 'static');
+        
+        try {
+            const canvas = await html2canvas(area, { 
+                scale: 2, 
+                useCORS: true, 
+                backgroundColor: "#ffffff", 
+                logging: false, 
+                width: area.scrollWidth, 
+                height: area.scrollHeight 
+            });
+            const link = document.createElement('a'); 
+            link.download = `Jadwal_Puskesmas_${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png'); 
+            link.click();
+            showToast("Foto Disimpan!");
+        } catch (err) { 
+            console.error(err);
+            alert("Gagal mengambil foto!"); 
+        } finally {
+            document.getElementById('export-header').classList.add('hidden');
+            document.getElementById('export-legend').classList.add('hidden');
+            document.getElementById('capture-footer').style.display = 'none';
+            tableWrapper.setAttribute('style', origWrapperStyle); 
+            area.setAttribute('style', origAreaStyle);
+            stickyCols.forEach(el => el.style.position = 'sticky');
+            headers.forEach(el => el.style.position = 'sticky');
+            window.scrollTo(originalScrollX, originalScrollY);
+            btn.innerHTML = originalText; btn.disabled = false;
+        }
+    }
+
+    window.onload = () => { initFilters(); fetchData(); };
+</script>
+
+</body>
+</html>
