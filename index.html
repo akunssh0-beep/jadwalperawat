@@ -367,6 +367,7 @@
 
 <script>
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw-Fl_qSNgqr9oEnn3vUmCtN4bRCZ5M7wz5YMiofUD33pN-kICuL6zubelKVcI_k2luXg/exec";
+    const STORAGE_KEY = "SAMPANAHAN_DB_CACHE";
     
     let db = { 
         officers: [], 
@@ -376,7 +377,7 @@
         } 
     };
     let viewMode = 'monthly';
-    let appMode = 'view'; // Default Mode View
+    let appMode = 'view';
     const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
     const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
     const now = new Date();
@@ -390,20 +391,37 @@
         setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3000);
     }
 
-    // New: Function to handle Application Mode (View vs Edit)
+    // LOCAL STORAGE LOGIC
+    function saveToLocal() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    }
+
+    function loadFromLocal() {
+        const cached = localStorage.getItem(STORAGE_KEY);
+        if (cached) {
+            try {
+                const parsed = JSON.parse(cached);
+                db = parsed;
+                return true;
+            } catch (e) {
+                console.error("Cache error", e);
+                return false;
+            }
+        }
+        return false;
+    }
+
     function setAppMode(mode) {
         appMode = mode;
         document.getElementById('mode-view').className = mode === 'view' ? 'btn-toggle active flex-1 text-center' : 'btn-toggle inactive flex-1 text-center';
         document.getElementById('mode-edit').className = mode === 'edit' ? 'btn-toggle active flex-1 text-center' : 'btn-toggle inactive flex-1 text-center';
         
-        // Hide admin buttons in view mode
         const adminActions = document.getElementById('admin-actions');
         if (mode === 'view') {
             adminActions.classList.add('hidden');
         } else {
             adminActions.classList.remove('hidden');
         }
-        
         renderTable();
     }
 
@@ -436,6 +454,7 @@
         input.value = "";
         renderShiftManagerList();
         renderTable();
+        saveToLocal();
         showToast(`Shift ${code} ditambahkan`);
     }
 
@@ -446,6 +465,7 @@
             db.config.shifts.splice(index, 1);
             renderShiftManagerList();
             renderTable();
+            saveToLocal();
         }
     }
 
@@ -485,6 +505,7 @@
         input.value = "";
         renderNurseManagerList();
         renderTable();
+        saveToLocal();
         showToast(`Petugas ${name} ditambahkan`);
     }
 
@@ -495,6 +516,7 @@
             if (db.schedule[name]) delete db.schedule[name];
             renderNurseManagerList();
             renderTable();
+            saveToLocal();
             showToast("Berhasil dihapus");
         }
     }
@@ -509,6 +531,7 @@
             if (db.schedule[oldName]) { db.schedule[formatted] = db.schedule[oldName]; delete db.schedule[oldName]; }
             renderNurseManagerList();
             renderTable();
+            saveToLocal();
             showToast("Nama diubah");
         }
     }
@@ -527,8 +550,6 @@
             yearSel.add(opt);
         }
         updateWeekOptions();
-        
-        // Initialize Default Mode
         setAppMode('view');
     }
 
@@ -567,15 +588,25 @@
     }
 
     async function fetchData() {
+        // Load dari cache dulu biar instant
+        if (loadFromLocal()) {
+            renderTable(true);
+            console.log("Loaded from cache");
+        }
+
         try {
             const response = await fetch(WEB_APP_URL + "?action=getData");
             const data = await response.json();
             db.officers = data.officers || [];
             db.schedule = data.schedule || {};
             if (data.config && data.config.shifts) db.config.shifts = data.config.shifts;
+            
+            // Simpan ke cache setelah fetch berhasil
+            saveToLocal();
             renderTable(true); 
         } catch (error) {
-            db.officers = ["CONTOH PETUGAS"];
+            console.log("Offline mode or error fetching");
+            if (!db.officers.length) db.officers = ["DUMMY DATA"];
             renderTable(true);
         }
     }
@@ -655,7 +686,6 @@
                             </select>
                         </td>`;
                     } else {
-                        // Render as text in View Mode
                         bodyHtml += `<td class="${classes}"><div class="shift-display">${shiftValue}</div></td>`;
                     }
                 });
@@ -704,6 +734,9 @@
         const shiftClass = getShiftClass(el.value);
         const classes = `${isSunday ? 'cell-sunday' : ''} ${isToday ? 'cell-today' : ''} ${shiftClass}`;
         td.className = classes; el.className = `shift-input ${classes}`;
+        
+        // Simpan setiap perubahan ke lokal agar tidak hilang
+        saveToLocal();
     }
 
     async function saveToCloud() {
@@ -714,7 +747,10 @@
                 body: JSON.stringify({ action: 'updateFullConfig', payload: { config: db.config, officers: db.officers, schedule: db.schedule } })
             });
             const res = await resp.json();
-            if(res.status === 'success') showToast("Tersimpan!");
+            if(res.status === 'success') {
+                saveToLocal(); // Sinkronkan cache lokal setelah cloud sukses
+                showToast("Tersimpan!");
+            }
         } catch(e) { alert("Gagal Simpan!"); } finally { btn.disabled = false; btn.innerHTML = `💾 Simpan`; }
     }
 
@@ -722,10 +758,7 @@
         const month = monthNames[document.getElementById('select-month').value];
         const year = document.getElementById('select-year').value;
         const table = document.getElementById("main-table").cloneNode(true);
-        
-        // Handle dropdowns vs view mode text
         table.querySelectorAll('select').forEach(sel => { const txt = document.createTextNode(sel.value); sel.parentNode.replaceChild(txt, sel); });
-        
         const wb = XLSX.utils.table_to_book(table, { sheet: "Jadwal" });
         const dataArr = XLSX.utils.sheet_to_json(wb.Sheets["Jadwal"], { header: 1 });
         dataArr.push([], [`Dihasilkan: ${new Date().toLocaleString()}`], [`© 2026 Puskesmas Sampanahan`]);
@@ -737,45 +770,29 @@
         const area = document.getElementById('capture-area');
         const btn = e.currentTarget; const originalText = btn.innerHTML;
         btn.innerHTML = "⏳..."; btn.disabled = true;
-        
         const originalScrollX = window.scrollX; const originalScrollY = window.scrollY;
         window.scrollTo(0, 0);
-        
         const stickyCols = document.querySelectorAll('.sticky-col');
         const headers = document.querySelectorAll('th');
         const tableWrapper = document.querySelector('.table-wrapper');
         const table = document.getElementById('main-table');
         const origWrapperStyle = tableWrapper.getAttribute('style') || '';
         const origAreaStyle = area.getAttribute('style') || '';
-        
         document.getElementById('export-header').classList.remove('hidden');
         document.getElementById('export-legend').classList.remove('hidden');
         document.getElementById('capture-footer').style.display = 'flex';
-        
         tableWrapper.style.maxHeight = 'none'; tableWrapper.style.overflow = 'visible';
         area.style.width = table.scrollWidth + 40 + 'px'; area.style.maxWidth = 'none';
-        
         stickyCols.forEach(el => el.style.position = 'static');
         headers.forEach(el => el.style.position = 'static');
-        
         try {
-            const canvas = await html2canvas(area, { 
-                scale: 2, 
-                useCORS: true, 
-                backgroundColor: "#ffffff", 
-                logging: false, 
-                width: area.scrollWidth, 
-                height: area.scrollHeight 
-            });
+            const canvas = await html2canvas(area, { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false, width: area.scrollWidth, height: area.scrollHeight });
             const link = document.createElement('a'); 
             link.download = `Jadwal_Puskesmas_${Date.now()}.png`;
             link.href = canvas.toDataURL('image/png'); 
             link.click();
             showToast("Foto Disimpan!");
-        } catch (err) { 
-            console.error(err);
-            alert("Gagal mengambil foto!"); 
-        } finally {
+        } catch (err) { alert("Gagal!"); } finally {
             document.getElementById('export-header').classList.add('hidden');
             document.getElementById('export-legend').classList.add('hidden');
             document.getElementById('capture-footer').style.display = 'none';
@@ -790,7 +807,6 @@
 
     window.onload = () => { initFilters(); fetchData(); };
 </script>
-
 
     <script>
       if ('serviceWorker' in navigator) {
