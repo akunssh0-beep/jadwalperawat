@@ -112,23 +112,21 @@
             background: #f8fafc !important;
         }
         
-        select.shift-input, .shift-display {
+        select.shift-input {
             width: 100%;
             height: 44px;
             border: none;
             background: transparent;
             text-align: center;
             font-weight: 800;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            cursor: pointer;
             appearance: none;
             outline: none;
             transition: all 0.2s;
             font-size: 10px;
         }
         @media (min-width: 768px) {
-            select.shift-input, .shift-display { height: 52px; font-size: 11px; }
+            select.shift-input { height: 52px; font-size: 11px; }
         }
 
         /* Default Shift Colors */
@@ -285,7 +283,7 @@
             </div>
         </div>
 
-        <div id="admin-actions" class="action-grid w-full lg:w-auto">
+        <div class="action-grid w-full lg:w-auto">
             <button onclick="openAddNurseModal()" class="py-3 px-2 md:px-5 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase flex items-center justify-center gap-2">
                 <span>👥</span> Petugas
             </button>
@@ -302,12 +300,7 @@
     </div>
 
     <div class="bg-white p-4 md:p-6 rounded-2xl md:rounded-[28px] border border-slate-200 flex flex-col gap-4 mb-4">
-        <div class="flex flex-col md:flex-row gap-4 items-center w-full">
-            <div class="flex bg-slate-900 p-1 rounded-xl border border-slate-800 w-full md:w-48">
-                <button id="mode-view" onclick="setAppMode('view')" class="btn-toggle active flex-1 text-center">👁️ View</button>
-                <button id="mode-edit" onclick="setAppMode('edit')" class="btn-toggle inactive flex-1 text-center">✏️ Edit</button>
-            </div>
-
+        <div class="flex flex-col md:flex-row gap-3 items-center w-full">
             <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full md:w-48">
                 <button id="view-monthly" onclick="setViewMode('monthly')" class="btn-toggle active flex-1 text-center">Bulan</button>
                 <button id="view-weekly" onclick="setViewMode('weekly')" class="btn-toggle inactive flex-1 text-center">Minggu</button>
@@ -367,7 +360,6 @@
 
 <script>
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw-Fl_qSNgqr9oEnn3vUmCtN4bRCZ5M7wz5YMiofUD33pN-kICuL6zubelKVcI_k2luXg/exec";
-    const STORAGE_KEY = "SAMPANAHAN_DB_CACHE";
     
     let db = { 
         officers: [], 
@@ -377,7 +369,6 @@
         } 
     };
     let viewMode = 'monthly';
-    let appMode = 'view';
     const monthNames = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
     const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
     const now = new Date();
@@ -389,40 +380,6 @@
         t.innerHTML = `<span>✅</span> <span class="font-bold text-[9px] uppercase tracking-wider">${msg}</span>`;
         container.appendChild(t);
         setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 400); }, 3000);
-    }
-
-    // LOCAL STORAGE LOGIC
-    function saveToLocal() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    }
-
-    function loadFromLocal() {
-        const cached = localStorage.getItem(STORAGE_KEY);
-        if (cached) {
-            try {
-                const parsed = JSON.parse(cached);
-                db = parsed;
-                return true;
-            } catch (e) {
-                console.error("Cache error", e);
-                return false;
-            }
-        }
-        return false;
-    }
-
-    function setAppMode(mode) {
-        appMode = mode;
-        document.getElementById('mode-view').className = mode === 'view' ? 'btn-toggle active flex-1 text-center' : 'btn-toggle inactive flex-1 text-center';
-        document.getElementById('mode-edit').className = mode === 'edit' ? 'btn-toggle active flex-1 text-center' : 'btn-toggle inactive flex-1 text-center';
-        
-        const adminActions = document.getElementById('admin-actions');
-        if (mode === 'view') {
-            adminActions.classList.add('hidden');
-        } else {
-            adminActions.classList.remove('hidden');
-        }
-        renderTable();
     }
 
     function openShiftModal() {
@@ -454,7 +411,6 @@
         input.value = "";
         renderShiftManagerList();
         renderTable();
-        saveToLocal();
         showToast(`Shift ${code} ditambahkan`);
     }
 
@@ -465,7 +421,6 @@
             db.config.shifts.splice(index, 1);
             renderShiftManagerList();
             renderTable();
-            saveToLocal();
         }
     }
 
@@ -505,7 +460,6 @@
         input.value = "";
         renderNurseManagerList();
         renderTable();
-        saveToLocal();
         showToast(`Petugas ${name} ditambahkan`);
     }
 
@@ -516,7 +470,6 @@
             if (db.schedule[name]) delete db.schedule[name];
             renderNurseManagerList();
             renderTable();
-            saveToLocal();
             showToast("Berhasil dihapus");
         }
     }
@@ -531,7 +484,6 @@
             if (db.schedule[oldName]) { db.schedule[formatted] = db.schedule[oldName]; delete db.schedule[oldName]; }
             renderNurseManagerList();
             renderTable();
-            saveToLocal();
             showToast("Nama diubah");
         }
     }
@@ -550,10 +502,12 @@
             yearSel.add(opt);
         }
         updateWeekOptions();
-        setAppMode('view');
     }
 
-    function handleMonthYearChange() { updateWeekOptions(); renderTable(); }
+    function handleMonthYearChange() { 
+        updateWeekOptions(); 
+        renderTable(); 
+    }
 
     function updateWeekOptions() {
         const month = parseInt(document.getElementById('select-month').value);
@@ -588,25 +542,15 @@
     }
 
     async function fetchData() {
-        // Load dari cache dulu biar instant
-        if (loadFromLocal()) {
-            renderTable(true);
-            console.log("Loaded from cache");
-        }
-
         try {
             const response = await fetch(WEB_APP_URL + "?action=getData");
             const data = await response.json();
             db.officers = data.officers || [];
             db.schedule = data.schedule || {};
             if (data.config && data.config.shifts) db.config.shifts = data.config.shifts;
-            
-            // Simpan ke cache setelah fetch berhasil
-            saveToLocal();
             renderTable(true); 
         } catch (error) {
-            console.log("Offline mode or error fetching");
-            if (!db.officers.length) db.officers = ["DUMMY DATA"];
+            db.officers = ["CONTOH PETUGAS"];
             renderTable(true);
         }
     }
@@ -621,6 +565,7 @@
         const yearSelect = parseInt(document.getElementById('select-year').value);
         const search = document.getElementById('search-nurse').value.toLowerCase();
         let daysToRender = [];
+        
         if (viewMode === 'weekly') {
             const weekVal = document.getElementById('select-week').value;
             if(weekVal) {
@@ -632,10 +577,17 @@
                 }
             }
         } else {
+            // Logika Full Bulan: Mengambil jumlah hari di bulan yang dipilih
             const daysInMonth = new Date(yearSelect, monthSelect + 1, 0).getDate();
             for(let d = 1; d <= daysInMonth; d++) {
                 let dateObj = new Date(yearSelect, monthSelect, d);
-                daysToRender.push({ day: d, month: monthSelect, year: yearSelect, isSunday: dateObj.getDay() === 0, dayName: dayNames[dateObj.getDay()] });
+                daysToRender.push({ 
+                    day: d, 
+                    month: monthSelect, 
+                    year: yearSelect, 
+                    isSunday: dateObj.getDay() === 0, 
+                    dayName: dayNames[dateObj.getDay()] 
+                });
             }
         }
 
@@ -663,31 +615,34 @@
                 bodyHtml += `<tr><td class="sticky-col uppercase truncate">${name}</td>`;
                 daysToRender.forEach(d => {
                     let shiftValue = "";
-                    if (db.schedule[name] && db.schedule[name][d.year] && db.schedule[name][d.year][d.month]) {
-                        shiftValue = db.schedule[name][d.year][d.month][d.day] || "";
-                    } else if (db.schedule[name] && db.schedule[name][d.day] && d.month === monthSelect) {
-                        shiftValue = db.schedule[name][d.day] || "";
+                    
+                    // PRIORITAS 1: Cek Format Baru [Tahun][Bulan][Tanggal]
+                    if (db.schedule[name] && 
+                        db.schedule[name][d.year] !== undefined && 
+                        db.schedule[name][d.year][d.month] !== undefined && 
+                        db.schedule[name][d.year][d.month][d.day] !== undefined) {
+                        shiftValue = db.schedule[name][d.year][d.month][d.day];
+                    } 
+                    // PRIORITAS 2: Cek Format Lama (Hanya Tanggal) Khusus April 2026 (Migration Logic)
+                    else if (d.year === 2026 && d.month === 3 && db.schedule[name] && db.schedule[name][d.day] !== undefined) {
+                        shiftValue = db.schedule[name][d.day];
                     }
 
                     const isToday = d.day === tDay && d.month === tMonth && d.year === tYear;
                     const shiftClass = getShiftClass(shiftValue);
                     const classes = `${d.isSunday ? 'cell-sunday' : ''} ${isToday ? 'cell-today' : ''} ${shiftClass}`;
                     
-                    if (appMode === 'edit') {
-                        let optionsHtml = '<option value=""></option>';
-                        db.config.shifts.forEach(sh => {
-                            optionsHtml += `<option value="${sh}" ${shiftValue === sh ? 'selected' : ''}>${sh}</option>`;
-                        });
+                    let optionsHtml = '<option value=""></option>';
+                    db.config.shifts.forEach(sh => {
+                        optionsHtml += `<option value="${sh}" ${shiftValue === sh ? 'selected' : ''}>${sh}</option>`;
+                    });
 
-                        bodyHtml += `
-                        <td class="${classes}">
-                            <select onchange="updateShift('${name}', ${d.year}, ${d.month}, ${d.day}, this, ${d.isSunday}, ${isToday})" class="shift-input ${classes}">
-                                ${optionsHtml}
-                            </select>
-                        </td>`;
-                    } else {
-                        bodyHtml += `<td class="${classes}"><div class="shift-display">${shiftValue}</div></td>`;
-                    }
+                    bodyHtml += `
+                    <td class="${classes}">
+                        <select onchange="updateShift('${name}', ${d.year}, ${d.month}, ${d.day}, this, ${d.isSunday}, ${isToday})" class="shift-input ${classes}">
+                            ${optionsHtml}
+                        </select>
+                    </td>`;
                 });
                 bodyHtml += `</tr>`;
             });
@@ -728,15 +683,16 @@
         if (!db.schedule[name][year][month]) db.schedule[name][year][month] = {};
         
         db.schedule[name][year][month][day] = el.value;
-        db.schedule[name][day] = el.value;
+        
+        // Sinkronisasi format lama untuk kompatibilitas April 2026
+        if(year === 2026 && month === 3) {
+            db.schedule[name][day] = el.value;
+        }
 
         const td = el.parentElement;
         const shiftClass = getShiftClass(el.value);
         const classes = `${isSunday ? 'cell-sunday' : ''} ${isToday ? 'cell-today' : ''} ${shiftClass}`;
         td.className = classes; el.className = `shift-input ${classes}`;
-        
-        // Simpan setiap perubahan ke lokal agar tidak hilang
-        saveToLocal();
     }
 
     async function saveToCloud() {
@@ -747,10 +703,7 @@
                 body: JSON.stringify({ action: 'updateFullConfig', payload: { config: db.config, officers: db.officers, schedule: db.schedule } })
             });
             const res = await resp.json();
-            if(res.status === 'success') {
-                saveToLocal(); // Sinkronkan cache lokal setelah cloud sukses
-                showToast("Tersimpan!");
-            }
+            if(res.status === 'success') showToast("Tersimpan!");
         } catch(e) { alert("Gagal Simpan!"); } finally { btn.disabled = false; btn.innerHTML = `💾 Simpan`; }
     }
 
@@ -770,29 +723,45 @@
         const area = document.getElementById('capture-area');
         const btn = e.currentTarget; const originalText = btn.innerHTML;
         btn.innerHTML = "⏳..."; btn.disabled = true;
+        
         const originalScrollX = window.scrollX; const originalScrollY = window.scrollY;
         window.scrollTo(0, 0);
+        
         const stickyCols = document.querySelectorAll('.sticky-col');
         const headers = document.querySelectorAll('th');
         const tableWrapper = document.querySelector('.table-wrapper');
         const table = document.getElementById('main-table');
         const origWrapperStyle = tableWrapper.getAttribute('style') || '';
         const origAreaStyle = area.getAttribute('style') || '';
+        
         document.getElementById('export-header').classList.remove('hidden');
         document.getElementById('export-legend').classList.remove('hidden');
         document.getElementById('capture-footer').style.display = 'flex';
+        
         tableWrapper.style.maxHeight = 'none'; tableWrapper.style.overflow = 'visible';
         area.style.width = table.scrollWidth + 40 + 'px'; area.style.maxWidth = 'none';
+        
         stickyCols.forEach(el => el.style.position = 'static');
         headers.forEach(el => el.style.position = 'static');
+        
         try {
-            const canvas = await html2canvas(area, { scale: 2, useCORS: true, backgroundColor: "#ffffff", logging: false, width: area.scrollWidth, height: area.scrollHeight });
+            const canvas = await html2canvas(area, { 
+                scale: 2, 
+                useCORS: true, 
+                backgroundColor: "#ffffff", 
+                logging: false, 
+                width: area.scrollWidth, 
+                height: area.scrollHeight 
+            });
             const link = document.createElement('a'); 
             link.download = `Jadwal_Puskesmas_${Date.now()}.png`;
             link.href = canvas.toDataURL('image/png'); 
             link.click();
             showToast("Foto Disimpan!");
-        } catch (err) { alert("Gagal!"); } finally {
+        } catch (err) { 
+            console.error(err);
+            alert("Gagal mengambil foto!"); 
+        } finally {
             document.getElementById('export-header').classList.add('hidden');
             document.getElementById('export-legend').classList.add('hidden');
             document.getElementById('capture-footer').style.display = 'none';
